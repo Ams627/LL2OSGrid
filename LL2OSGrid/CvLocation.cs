@@ -126,7 +126,7 @@ namespace LL2OSGrid
 
             a = eTo.a;
             b = eTo.b;
-            double precision = 4 / a;  // results accurate to around 4 metres
+            double precision = 0.05 / a;  // results accurate to around 4 metres
 
             eSq = (a * a - b * b) / (a * a);
             double p = Sqrt(x2 * x2 + y2 * y2);
@@ -149,8 +149,8 @@ namespace LL2OSGrid
 
         void ConvertWGS84ToOSGB36()
         {
-            var WGS84Ellipse = new EEllipse { a = 6378137, b = 6356752.3142, f = 1 / 298.257223563 };
-            var OSGB36Ellipse = new EEllipse { a = 6377563.396, b = 6356256.910, f = 1 / 299.3249646 };
+            var WGS84Ellipse = new EEllipse { a = 6378137, b = 6356752.314245, f = 1 / 298.257223563 };
+            var OSGB36Ellipse = new EEllipse { a = 6377563.396, b = 6356256.909, f = 1 / 299.3249646 };
             Helmert h = new Helmert { tx = -446.448, ty = 125.157,  tz =  -542.060,   // tx, ty, tz in metres (translation parameters)
                  rx = -0.1502, ry = -0.2470, rz = -0.8421,    // rx, ry, rz in seconds of a degree (rotational parameters)
                  s = 20.4894 }; // scale;
@@ -170,6 +170,9 @@ namespace LL2OSGrid
                 m_cacheValid = false;   // we have changed so E/N cache is rubbish
                 m_dLatitude = latitude * Math.PI / 180.0;
                 m_dLongitude = longitude * Math.PI / 180.0;
+
+                ConvertWGS84ToOSGB36();
+
                 result = true;
             }
 
@@ -314,8 +317,8 @@ namespace LL2OSGrid
 
             f1 = (1.0 + n + (5.0 * (n2 + n3) / 4.0)) * delta;
             f2 = (3.0 * (n + n2) + 21.0 * n3 / 8) * Sin(delta) * Cos(sum);
-            f3 = (15.0 * (n2 + n3) / 8.0 ) * Sin(delta) * Sin(delta) * Cos(sum) * Cos(sum);
-            f4 = (35.0 * n * n * n / 24.0) * Sin(delta) * Sin(delta) * Sin(delta) * Cos(sum) * Cos(sum) * Cos(sum);
+            f3 = (15.0 * (n2 + n3) / 8.0 ) * Sin(2 * delta) * Cos(2 * sum);
+            f4 = (35.0 * n * n * n / 24.0) * Sin(3 * delta) * Cos(3 * sum);
 
             return b * (f1 - f2 + f3 - f4);
         }
