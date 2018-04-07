@@ -13,7 +13,7 @@ namespace LL2OSGrid
         {
             try
             {
-                var loc = new CvLocation();
+                var loc = new GridLocation();
                 loc.SetLatLongDegrees(50.715812, -2.011931);
                 var (eastings, northings) = loc.OsGrid;
                 Console.WriteLine($"{eastings} {northings}");

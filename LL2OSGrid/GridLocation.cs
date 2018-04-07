@@ -4,19 +4,19 @@ namespace LL2OSGrid
 {
     using System;
 
-    internal class CvLocation
+    internal class GridLocation
     {
         class EEllipse
         {
-            public double a { get; set; }
-            public double b { get; set; }
+            public double A { get; set; }
+            public double B { get; set; }
             public double f { get; set; }
         };
 
         // Helmert Transformation - see http://en.wikipedia.org/wiki/Helmert_transformation
         class Helmert
         {
-            public double tx { get; set; }
+            public double Tx { get; set; }
             public double ty { get; set; }
             public double tz { get; set; }
             public double rx { get; set; }
@@ -28,8 +28,8 @@ namespace LL2OSGrid
         // Official version from June 2009 - this version is correct where previous versions were in error!
         // This version has a function ConvertWGS84ToOSGB36 which converts WGS84 as used by GPS to 
 
-        private double m_dLongitude;
-        private double m_dLatitude;
+        private double _longitude;
+        private double _latitude;
         private bool m_cacheValid;
         private int m_cachedEastings;
         private int m_cachedNorthings;
@@ -43,7 +43,7 @@ namespace LL2OSGrid
             {
                 if (!m_cacheValid)
                 {
-                    LongLat2OSGrid(m_dLatitude, m_dLongitude);
+                    LongLat2OSGrid(_latitude, _longitude);
                 }
                 return (m_cachedEastings, m_cachedNorthings);
             }
@@ -55,7 +55,7 @@ namespace LL2OSGrid
             {
                 if (!m_cacheValid)
                 {
-                    LongLat2OSGrid(m_dLatitude, m_dLongitude);
+                    LongLat2OSGrid(_latitude, _longitude);
                 }
                 return m_cachedEastings;
             }
@@ -67,7 +67,7 @@ namespace LL2OSGrid
             {
                 if (!m_cacheValid)
                 {
-                    LongLat2OSGrid(m_dLatitude, m_dLongitude);
+                    LongLat2OSGrid(_latitude, _longitude);
                 }
                 return m_cachedNorthings;
             }
@@ -77,7 +77,7 @@ namespace LL2OSGrid
         {
             if (!m_cacheValid)
             {
-                LongLat2OSGrid(m_dLatitude, m_dLongitude);
+                LongLat2OSGrid(_latitude, _longitude);
             }
             int hsquare = m_cachedEastings / 100000;
             int vsquare = m_cachedNorthings / 100000 - 1;
@@ -98,21 +98,24 @@ namespace LL2OSGrid
 
         void ConvertSystem(EEllipse eTo, EEllipse eFrom, Helmert h)
         {
-            double a = eFrom.a, b = eFrom.b;
+            double a = eFrom.A, b = eFrom.B;
+            double f = eFrom.f;
 
             //    double sinPhi = Sin(p1.lat), cosPhi = Cos(p1.lat);
             //    double sinLambda = Sin(p1.lon), cosLambda = Cos(p1.lon);
 
             double H = 0; // Height
 
-            double eSq = (a * a - b * b) / (a * a);
-            double nu = a / Sqrt(1 - eSq * Sin(m_dLatitude) * Sin(m_dLatitude));
-            double x1 = (nu + H) * Cos(m_dLatitude) * Cos(m_dLongitude);
-            double y1 = (nu + H) * Cos(m_dLatitude) * Sin(m_dLongitude);
-            double z1 = ((1 - eSq) * nu + H) * Sin(m_dLatitude);
+            double eSq = 2 * f - f * f;
+            double eSq1 = (a * a - b * b) / (a * a);
+            double nu = a / Sqrt(1 - eSq * Sin(_latitude) * Sin(_latitude));
+            double x1 = (nu + H) * Cos(_latitude) * Cos(_longitude);
+            double y1 = (nu + H) * Cos(_latitude) * Sin(_longitude);
+            double z1 = ((1 - eSq) * nu + H) * Sin(_latitude);
+
+            Console.WriteLine($"old cartesian {x1:N11}, {y1:N11}, {z1:N11}");
 
             // Apply helmert transformation:
-
             double tx = h.tx, ty = h.ty, tz = h.tz;
             double rx = h.rx / 3600 * PI / 180;  // convert seconds to radians
             double ry = h.ry / 3600 * PI / 180;
@@ -124,33 +127,43 @@ namespace LL2OSGrid
             double y2 = ty + x1 * rz + y1 * s1 - z1 * rx;
             double z2 = tz - x1 * ry + y1 * rx + z1 * s1;
 
-            a = eTo.a;
-            b = eTo.b;
-            double precision = 0.05 / a;  // results accurate to around 4 metres
+            Console.WriteLine($"new cartesian {x2:N11}, {y2:N11}, {z2:N11}");
+            a = eTo.A;
+            b = eTo.B;
+            f = eTo.f;
 
-            eSq = (a * a - b * b) / (a * a);
+            eSq = 2 * f - f * f;
             double p = Sqrt(x2 * x2 + y2 * y2);
             double phi = Atan2(z2, p * (1 - eSq));
             double phiP = 2 * PI;
+
+            double precision = 0.05 / a;  // results accurate to around 4 metres
+            var iterationCount = 0;
 
             while (Abs(phi - phiP) > precision)
             {
                 nu = a / Sqrt(1 - eSq * Sin(phi) * Sin(phi));
                 phiP = phi;
                 phi = Atan2(z2 + eSq * nu * Sin(phi), p);
+                iterationCount++;
             }
+            Console.WriteLine($"Iterations: {iterationCount}");
             double lambda = Atan2(y2, x2);
             H = p / Cos(phi) - nu;
 
-            m_dLatitude = phi;
-            m_dLongitude = lambda;
+            _latitude = phi;
+            _longitude = lambda;
+            Console.WriteLine($"new latitude is {_latitude}");
+            Console.WriteLine($"new longitude is {_longitude}");
+            Console.WriteLine($"new latitude deg is {_latitude / Math.PI * 180.0}");
+            Console.WriteLine($"new longitude deg is {_longitude / Math.PI * 180.0}");
             m_cacheValid = false;
         }
 
-        void ConvertWGS84ToOSGB36()
+        private void ConvertWGS84ToOSGB36()
         {
-            var WGS84Ellipse = new EEllipse { a = 6378137, b = 6356752.314245, f = 1 / 298.257223563 };
-            var OSGB36Ellipse = new EEllipse { a = 6377563.396, b = 6356256.909, f = 1 / 299.3249646 };
+            var WGS84Ellipse = new EEllipse { A = 6378137, B = 6356752.314245, f = 1 / 298.257223563 };
+            var OSGB36Ellipse = new EEllipse { A = 6377563.396, B = 6356256.909, f = 1 / 299.3249646 };
             Helmert h = new Helmert { tx = -446.448, ty = 125.157,  tz =  -542.060,   // tx, ty, tz in metres (translation parameters)
                  rx = -0.1502, ry = -0.2470, rz = -0.8421,    // rx, ry, rz in seconds of a degree (rotational parameters)
                  s = 20.4894 }; // scale;
@@ -168,8 +181,8 @@ namespace LL2OSGrid
             else
             {
                 m_cacheValid = false;   // we have changed so E/N cache is rubbish
-                m_dLatitude = latitude * Math.PI / 180.0;
-                m_dLongitude = longitude * Math.PI / 180.0;
+                _latitude = latitude * Math.PI / 180.0;
+                _longitude = longitude * Math.PI / 180.0;
 
                 ConvertWGS84ToOSGB36();
 
@@ -240,8 +253,8 @@ namespace LL2OSGrid
                             Et * Et * Et * Et * Et * XII -
                             Et * Et * Et * Et * Et * Et * Et * XIIA;
 
-            m_dLongitude = lambda;
-            m_dLatitude = phi;
+            _longitude = lambda;
+            _latitude = phi;
         }
 
         /// <summary>
@@ -300,6 +313,8 @@ namespace LL2OSGrid
 
             m_cachedEastings = (int) E;
             m_cachedNorthings = (int) N;
+            Console.WriteLine($"E {E}");
+            Console.WriteLine($"N {N}");
             m_cacheValid = true;
         }
 
